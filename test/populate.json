@@ -1,0 +1,30 @@
+[
+    {
+        "name": "Quest for Legends",
+        "prompt": "A group of friends embark on a thrilling adventure to find a legendary treasure.",
+        "parts": 5,
+        "choices": 2,
+        "tag": "test-story-populate-1"
+    },
+    {
+        "name": "Portal of Whispers",
+        "prompt": "A young girl discovers a hidden portal that leads to a magical realm of talking animals.",
+        "parts": 4,
+        "choices": 3,
+        "tag": "test-story-populate-2"
+    },
+    {
+        "name": "Vanishing Tides",
+        "prompt": "A detective unravels a series of mysterious disappearances in a small seaside town.",
+        "parts": 6,
+        "choices": 2,
+        "tag": "test-story-populate-3"
+    },
+    {
+        "name": "Revelation's Edge",
+        "prompt": "In a dystopian future, a rebellious teenager uncovers a dark secret that changes everything.",
+        "parts": 5,
+        "choices": 3,
+        "tag": "test-story-populate-4"
+    }
+]
