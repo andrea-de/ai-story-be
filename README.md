@@ -1,3 +1,13 @@
+Now:
+-Auth and readonly
+
+Later:
+-Use own openai token
+-Write in own choice(s)
+-Regenerate choice(s)
+-Traverse tree
+
+
 # story-server
 
 To install dependencies:

@@ -7,7 +7,6 @@ const userSchema = new mongoose.Schema(
     {
         methods: {
             do() {
-                console.log(`${this.name} did it!`);
             },
         },
     }

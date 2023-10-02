@@ -3,28 +3,33 @@ import { Story } from './Story';
 
 export class MongooseClient {
 
-    uri = "mongodb+srv://" +
+    collection = '/llm-story'
+
+    uri = (process.env.DB_URI ||
+        "mongodb+srv://" +
         process.env.ATLAS_USERNAME +
         ":" + process.env.ATLAS_PASSWORD +
-        "@" + process.env.ATLAS_URI +
-        "/llm-story"; // /test?retryWrites=true&w=majority";
+        "@" + process.env.ATLAS_URI) +
+        this.collection; // /test?retryWrites=true&w=majority";
+
 
     async connect() {
         try {
             await mongoose.connect(this.uri);
-            console.log('Connected to DB');
-        } catch (error) {
-            console.log(error);
+            Bun.write(Bun.stdout, 'Connected to DB\n');
+        } catch (error: any) {
+            Bun.write(Bun.stdout, error.stack + '\n');
         }
     }
-    
+
     async disconnect() {
         await mongoose.disconnect();
-        console.log('Disonnected to DB');
+        Bun.write(Bun.stdout, 'Disonnected to DB\n');
     }
 
-    async deleteTestStory() {
-        return await Story.deleteMany({ 'tag': 'test-story' });
+    async deleteTestStories() {
+        // Bun.write(Bun.stdout, 'Deleting test stories. \n');
+        await Story.deleteMany({ 'tag': { $regex: '.*test-story.*' } });
     }
 
 }

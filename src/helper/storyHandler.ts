@@ -28,15 +28,31 @@ interface AtPosition {
 export async function handleGetStoryAtPosition({ params }: { params: AtPosition }) {
     const position = params.position.split('-').map(p => parseInt(p))
     const story = await Story.findOne({ tag: params.tag })
-    const full = story ? await (story as any).getStory(position) : null
-    return full;
+    if (!story) return null
+    // check tree
+    const segments = await (story as any).getStoryAtPosition(position);
+    const choices = await (story as any).getChoices(position);
+
+    return {
+        name: story.name,
+        tag: story.tag,
+        segments: segments,
+        choices: choices
+    };
 }
 
-export async function handleGetActionsAtPosition({ params }: { params: AtPosition }) {
+export async function handleGetSegmentAtPosition({ params }: { params: AtPosition }) { // DEPRECATE
+    // const position = params.position.split('-').map(p => parseInt(p))
+    const story = await Story.findOne({ tag: params.tag })
+    const segment = story ? await (story as any).segments[params.position] : null
+    return segment;
+}
+
+export async function handleGetChoicesAtPosition({ params }: { params: AtPosition }) {
     const position = params.position.split('-').map(p => parseInt(p))
     const story = await Story.findOne({ tag: params.tag })
-    const full = story ? await (story as any).getStory(position) : null
-    return full;
+    const choices = await (story as any).getChoices(position);
+    return choices;
 }
 
 export interface NewStory {
@@ -47,85 +63,133 @@ export interface NewStory {
     tag?: string;
 }
 
-export async function handleCreateStory(params: NewStory) {
+export interface StoryResponse {
+    segments: object
+    choices: object
+}
+
+class BadRequest extends Error {
+    name: string
+    message: string
+    status: number
+    constructor(message: string) {
+        super(message);
+        this.name = 'Error';
+        this.message = 'Bad Request: ' + message;
+        this.status = 400
+    }
+}
+
+export async function handleCreateStory(body: NewStory): Promise<StoryResponse | BadRequest> {
     try {
         // Get First Segment
-        const [firstSegment, choices] = await ChatGPTClient.newStory('new story description', params.choices);
-        
+        const [firstSegment, choices] = await ChatGPTClient.newStory('new story description', body.choices);
+        const blurb = body.description; // should be received from ai
+        const tag = body.tag; // should be received from ai
+
+        const segmentsDict = { "0": firstSegment }
         const choicesDict: { [key: string]: string } = choices.reduce((obj, choice, index) => {
             obj[(index + 1).toString()] = choice;
             return obj;
         }, {} as { [key: string]: string });
 
+
+        const existing = await Story.findOne({ tag });
+        if (existing) return new BadRequest('Request Error: Story already exists with tag: ' + tag)
+
         // Persist Story
         const story = new Story({
-            tag: params.tag,
-            name: params.name,
-            prompt: params.description,
-            storyLengthMin: params.parts - 1,
-            storyLengthMax: params.parts + 1,
-            choicesLength: params.choices,
+            name: body.name,
+            description: body.description,
+            tag: tag,
+            blurb: blurb,
+            storyLengthMin: body.parts - 1,
+            storyLengthMax: body.parts + 1,
+            choicesLength: body.choices,
             choices: choicesDict,
-            segments: { "0": firstSegment },
+            segments: segmentsDict
         });
-        
         await story.save();
 
-        return ['CREATED', firstSegment, choices];
+        let result = {
+            segments: segmentsDict,
+            choices: choicesDict
+        }
+        return result
 
-    } catch (error) {
-        console.log(error);
-        return error;
+    } catch (error: any) {
+        Bun.write(Bun.stdout, error.stack + '\n');
+        throw error;
     }
 
 }
 
 export interface StoryAction {
     id?: string;
-    tag?: string;
-    position: number[];
+    tag: string;
+    position: string;
     action: number;
 }
 
-// Returns ['SUCCESS', nextSegment, nextChoices]
-export async function handleStoryAction(params: StoryAction, override = false) {
+export async function handleStoryAction(body: StoryAction, write = false, update = false): Promise<StoryResponse | BadRequest> {
     try {
-        // Check Story
-        const story = params.tag ? await Story.findOne({ tag: params.tag }) : await Story.findOne({ _id: params.id })
-        if (!story) throw new Error('Request Error: Story incorrect')
+        const tag: string = body.tag
+        const position: string = body.position
+        const action: number = body.action
 
-        // Check Tree
-        const treeExists = await (story as any).checkTree([...params.position, params.action])
-        console.log("treeexists: ", treeExists)
-        if (!treeExists) throw new Error('Request Error: Story Tree Error')
+        // Validate Story
+        const story = await Story.findOne({ tag: tag })
+        if (!story) return new BadRequest('Request Error: Incorrect Story')
 
-        // Check next segment exists
-        const nextSegment = story ? await (story as any).getSegment([...params.position, params.action]) : null
-        if (nextSegment) {
-            // Check next choices exist
-            const nextChoices = story ? await (story as any).getChoice([...params.position, params.action]) : null
-            if (!story) throw new Error('Request Error: Choice incorrect')
-            return ['SUCCESS', nextSegment, nextChoices]
+        // Validate Position
+        const positionArray: number[] = position.split('-').map(p => parseInt(p))
+        const currentPositionExists = await (story as any).checkTree(positionArray)
+        if (!currentPositionExists) return new BadRequest('Request Error: Incorrect Position')
+
+        // Validate Action Exists
+        if (action > story.choicesLength) return new BadRequest('Request Error: Incorrect Action')
+
+        // Check next position exists
+        const nextPositionArray = [...positionArray, action]
+        const nextPositionExists = await (story as any).checkTree(nextPositionArray)
+
+        if (nextPositionExists && !update) { // No existing continuation and not overriding
+            const nextSegment = await (story as any).getSegment(nextPositionArray)
+            const nextChoices = await (story as any).getChoices(nextPositionArray)
+            let result = {
+                segments: nextSegment,
+                choices: nextChoices
+            }
+            return result
+        } else if (!write) { // Readonly
+            // return { name:"Error", error: 'Request Error: Readonly', code: 400 }
+            return new BadRequest('Readonly')
+            // throw new BadRequestError('Readonly')
+            // throw new Error('Request Error: Readonly')
         }
 
-        /* MUTATES STORY */
-        // authorize story writing/overwriting
-        const full = await (story as any).getStory(params.position)
-        const choice = await (story as any).getChoice([...params.position, params.action])
-        const isEnding = calcEnding(story.storyLengthMin, story.storyLengthMax, params.action)
-        const [newSegment, newChoices] = await ChatGPTClient.continue(full, choice, isEnding ? 0 : story.choicesLength);
+        /* MUTATES STORY */ // Needs to confirm authorization for story writing/overwriting
+        const storyAtPositionDict = await (story as any).getStoryAtPosition(positionArray)
+        const storyAtPosition: string[] = Object.values(storyAtPositionDict)
 
-        // Persist // TODO: check duplicate/override
-        (story as any).updateSegment([...params.position, params.action], newSegment)
-        if (newChoices) (story as any).updateChoices([...params.position, params.action], newChoices)
+        const choice = await (story as any).getChoice([...positionArray, action])
+        const isEnding = calcEnding(story.storyLengthMin, story.storyLengthMax, action)
+        const [newSegment, newChoices] = await ChatGPTClient.continue(storyAtPosition, choice, isEnding ? 0 : story.choicesLength);
+
+        // Persist
+        const newSegmentDict = await (story as any).updateSegment(nextPositionArray, newSegment)
+        const newChoicesDict = (newChoices) ? await (story as any).updateChoices(nextPositionArray, newChoices) : {}
         // story.markModified('segments'); SAFER
         await Story.updateOne({ _id: story.id }, { $set: story.toJSON() });
 
         // Response
-        return ['SUCCESS', newSegment, newChoices]
-
-    } catch (error) {
-        console.log(error)
+        let result = {
+            segments: { ...newSegmentDict },
+            choices: newChoicesDict
+        }
+        return result
+    } catch (error: any) {
+        Bun.write(Bun.stdout, error.stack + '\n');
         return error
     }
 }

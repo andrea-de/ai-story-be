@@ -33,8 +33,8 @@ export class ChatGPTClient {
         return [newStory, newChoicesArray]
     }
 
-    static async continue(full: string[], choice: string, nextChoices: number): Promise<[string, string[]]> {
-        let story = full.reduce((acc, segment) => acc + '\n\n' + segment, '');
+    static async continue(storyAtPosition: string[], choice: string, nextChoices: number): Promise<[string, string[]]> {
+        let story = storyAtPosition.reduce((acc, segment) => acc + '\n\n' + segment, '');
         let segmentInstruction: string = nextChoices ? this.nextSegment(nextChoices) : this.ending;
         let choicesInstruction: string | null = nextChoices ? this.nextChoices(nextChoices) : null;
 

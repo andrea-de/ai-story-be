@@ -4,10 +4,10 @@ type NewType = boolean;
 
 export const storySchema = new Schema(
     {
-        name: { type: String, required: true },
-        prompt: { type: String, required: false },
-        description: { type: String, required: false }, // redundant??
-        tag: { type: String, required: false, unique: true },
+        description: { type: String, required: false }, // provided by user
+        name: { type: String, required: true }, // provided by user or generated
+        blurb: { type: String, required: false }, // generated
+        tag: { type: String, required: false, unique: true }, // generated
 
         choices: { type: Schema.Types.Mixed, default: {} }, // Makes up story
         segments: { type: Schema.Types.Mixed, default: {} }, // Makes up story
@@ -29,90 +29,81 @@ export const storySchema = new Schema(
     },
     {
         methods: {
-            async getSegment(position: number[]): Promise<string> { // [1,2] -> Returns segment 1-2
-                const segmentKey = position.join('-');
-                return this.segments[segmentKey]
+            async getSegment(position: number[]): Promise<object> { // [1,2] -> Returns segment 1-2
+                let segmentKey = position.join('-');
+                segmentKey = segmentKey.replace('0-', '')
+                return {[segmentKey]: this.segments[segmentKey]}
             },
-            async getStory(position: number[]): Promise<string[]> { // [1,2] -> Returns sements 0, 1, and 1-2
-                const segmentKeys = positionArrayToStringOrigin(position);
-                const segments = segmentKeys.map((key) => this.segments[key]);
-                return segments;
-            },
-            
-            async getChoice(position: number[]): Promise<string> { // [1,2,1] -> Returns choice 1-2-1
-                const choiceKey = position.join('-')
-                return this.choices[choiceKey]
-            },
-            async getChoices(position: number[]): Promise<string[]> { // [1,2] -> Returns choices 1-2-1, 1-2-2 ... n of choicesLength
-                const choiceKey = position.join('-')
-                const choices = [] 
-                for (let i = 0; i < this.choicesLength; i++){
-                    choices.push(this.segments[choiceKey + '-' + (i+1)])
-                }
-                return choices;
-            },
-            async updateSegment(position: number[], segment: string[]): Promise<void> {
-                const segmentKey = position.join('-');
-                this.segments[segmentKey] = segment;
-            },
-            async updateChoices(position: number[], choices: string[]): Promise<void> {
-                for (let i = 0; i < choices.length; i++) {
-                    const choiceKey = position.join('-') + '-' + (i+1);
-                    this.choices[choiceKey] = choices[i];
-                }
-            },
-            async checkTree(position: number[]): Promise<NewType> { // [1,2] -> Choice 2 segment not expected 
-                let check: boolean = true;
-                const segmentKeys = [positionArrayToStringOrigin(position).pop()];
-                segmentKeys.map((key) => {
-                    // @ts-ignore -> can't return undefined 
-                    if (this.segments[key]) check = false
-                });
-                const choiceKeys = positionArrayToString(position);
-                choiceKeys.map((key) => {
-                    if (this.choices[key] == undefined) check = false
-                    else (console.log("CHOICECHECK: ", key, " - ",  this.choices[key]))
-                });
-                return check;
-            },
-            async segmentsExists(position: number[]): Promise<NewType> { // [1,2] -> Choice 2 segment expected 
-                const segmentKeys = positionArrayToStringOrigin(position);
-                segmentKeys.map((key) => {
-                    if (this.segments[key]) return false
-                });
-                return true;
-            },
-            async choiceExists(position: number[]): Promise<NewType> { // [1,2] -> Choice 2 exists (infers choice 1 seggment exists) 
-                const choiceKeys = positionArrayToString(position);
-                choiceKeys.map((key) => {
-                    if (this.choices[key]) return false
-                });
-                return true;
+            async getStoryAtPosition(position: number[]): Promise<object> { // [1,2] -> Returns sements 0, 1, and 1-2
+                const segmentKeys = getSegmentKeysFromPosition(position);
+                return segmentKeys.reduce((obj, key) => (this.segments.hasOwnProperty(key) ? { ...obj, [key]: this.segments[key] } : obj), {})
             },
 
+            async getChoice(position: number[]): Promise<string> { // [1,2,1] -> Returns choice 1-2-1
+                let choiceKey = position.join('-')
+                choiceKey = choiceKey.replace('0-', '')
+                return this.choices[choiceKey]
+            },
+            async getChoices(position: number[]): Promise<object> { // [1,2] -> Returns choices 1-2-1, 1-2-2 ... n of choicesLength
+                const choiceKeys: string[] = getChoiceKeysFromPosition(position, this.choicesLength); // [1,2] should search for "1" and "1-(n)" n=choicesLength
+                return choiceKeys.reduce((obj, key) => (this.choices.hasOwnProperty(key) ? { ...obj, [key]: this.choices[key] } : obj), {})
+            },
+            async updateSegment(position: number[], segment: string[]): Promise<object> {
+                if (position.length > 1) position = position.filter(p=>p!=0)
+                const segmentKey = position.join('-');
+                this.segments[segmentKey] = segment;
+                let segmentDict: { [key: string]: string[] } = { [segmentKey]: segment }
+                return segmentDict
+            },
+            async updateChoices(position: number[], choices: string[]): Promise<object> {
+                let choicesDict: { [key: string]: string } = {}
+                position = position.filter(p=>p!=0)
+                for (let i = 0; i < choices.length; i++) {
+                    const choiceKey = position.join('-') + '-' + (i + 1);
+                    this.choices[choiceKey] = choices[i];
+                    choicesDict[choiceKey] = choices[i];
+                }
+                return choicesDict
+            },
+            async checkTree(position: number[]): Promise<NewType> {
+                const segmentKeys: string[] = getSegmentKeysFromPosition(position); // [1,2] should search for "0", "1", "1-2"
+                const segments = objectWithValueInArray(this.segments, segmentKeys)
+                
+                const choiceKeys: string[] = getChoiceKeysFromPosition(position, this.choicesLength); // [1,2] should search for "1-2-1" ... "1-2-(n)" n=choicesLength
+                const choices = objectWithValueInArray(this.choices, choiceKeys)
+
+                return (
+                    Object.keys(segments).length == segmentKeys.length
+                    &&
+                    Object.keys(choices).length == choiceKeys.length
+                )
+            },
         },
     }
 );
 
-// storySchema.methods.getStory = async function (position: number[]): Promise<string> {
-// return `This is the long story in position:  ${position}`;
-// };
-
 export const Story = mongoose.model<Story>('Story', storySchema);
 export type Story = mongoose.InferSchemaType<typeof storySchema>;
 
-function positionArrayToStringOrigin(position: number[]): string[] {
-    return ['0', ...positionArrayToString(position)]
-}
 
-function positionArrayToString(position: number[], withOrigin = false): string[] {
+export function getSegmentKeysFromPosition(position: number[]): string[] { 
+    position = position.filter(p=>p!=0)
     let segments = [];
     for (let i = 0; i < position.length; i++) {
         let segment = position.slice(0, i + 1).join('-');
         segments.push(segment);
     }
-    // console.log("segments: ", segments);
-    return segments;
+    if (segments[0] != '0') segments.unshift('0');
+    return segments 
 }
 
-// positionArrayToStringOrigin([1, 2]);
+export function getChoiceKeysFromPosition(position: number[], choicesLength: number): string[] { 
+    if (position.length > 1) position = position.filter(p=>p!=0)
+    const startPosition = position[0] != 0 ? position.join('-') + '-' : '';
+    const choiceKeys: string[] = Array.from({ length: choicesLength }, (_, index) => startPosition + (index + 1));
+    return choiceKeys
+}
+
+export function objectWithValueInArray(obj: { [key: string]: any }, arr: string[]) {
+    return arr.reduce((result, key) => (obj.hasOwnProperty(key) ? { ...result, [key]: obj[key] } : result), {})
+}

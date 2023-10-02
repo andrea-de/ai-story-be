@@ -21,9 +21,8 @@
   "scripts": {
     "dev": "bun --hot src/index.ts env",
     "serve": "bun src/index.ts env",
-    "test": "bun test test/api.test.ts",
-    "tdd": "bun test test/api.test.ts --grep 'should create a new story'",
-    "populate": "bun test test/populate.test.ts env --run-skipped",
-    "debug": "bun src/db/Story.ts env"
+    "tests": "bun test test/*.test.ts --coverage --preload ./test/setup.ts",
+    "tdd": "bun test test/dev/tdd.test.ts",
+    "populate": "bun test test/populate.test.ts env"
   }
 }

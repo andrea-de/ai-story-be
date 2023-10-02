@@ -10,7 +10,6 @@
         })
         .then((res) => res.json())
         .then((stories) => {
-                // console.log('hi');
                 document.getElementById("storyList").innerHTML = stories.map((story) => {
                     return `<li>${story.name}</li>`
             }).join("");

@@ -1,13 +1,22 @@
-import { describe, expect, it, afterAll } from 'bun:test'
-import { app, disconnect, db } from '../src/index';
+import { describe, expect, it, beforeAll, afterAll } from 'bun:test'
+import { app, connect, disconnect, db } from '../src/index';
 import { NewStory, StoryAction } from '../src/helper/storyHandler';
 
 describe('API', () => {
 
+    beforeAll(async () => {
+        await connect();
+    })
+
+    afterAll(async () => {
+        await disconnect();
+    })
+
     const tag = 'test-story'
-    let firstSegment: string
-    let newSegment: string
-    let newChoices: string
+    let story: any = {
+        segments: {},
+        choices: {}
+    }
 
     it('should create a new story', async () => {
         const response = await app.handle(
@@ -26,26 +35,32 @@ describe('API', () => {
             })
         ).then(res => res.json())
 
-        expect(response[0]).toEqual('CREATED'); // Response
-        expect(response[1]).toBeString(); // New Story Segment
-        expect(response[2]).toBeArray(); // Choices
-        firstSegment = response[1]
+        expect(response.segments['0']).toBeDefined();
+        expect(response.choices['1']).toBeDefined();
+        expect(response.choices['2']).toBeDefined();
+        story = {
+            segments: { ...response.segments },
+            choices: { ...response.choices }
+        }
     })
 
-    it('should retrieve the new story', async () => {
+    it('should retrieve the new story at position 0', async () => {
         const response = await app.handle(
-            new Request(`http://localhost/api/story/${tag}`, {
+            new Request(`http://localhost/api/story/${tag}/0`, {
                 method: 'GET',
                 headers: {
                     'Content-Type': 'application/json',
                 },
             })
         ).then(res => res.json())
-        expect(response.tag).toEqual(tag); // story exists with unique tag name
+
+        expect(response.tag).toEqual(tag);
+        expect(response.segments['0']).toEqual(story.segments['0']);
+        expect(response.choices['1']).toEqual(story.choices['1']);
+        expect(response.choices['2']).toEqual(story.choices['2']);
     })
 
-
-    it('should continue the story', async () => {
+    it('should continue a new story at position 0 and action 1', async () => {
         const response = await app.handle(
             new Request('http://localhost/api/story/action', {
                 method: 'POST',
@@ -54,55 +69,60 @@ describe('API', () => {
                 },
                 body: JSON.stringify({
                     tag: tag,
-                    position: [],
+                    position: '0',
                     action: 1
                 }),
             })
         ).then(res => res.json())
 
-        expect(response[0]).toEqual('SUCCESS'); // Response
-        expect(response[1]).toBeString(); // New Story Segment
-        expect(response[2]).toBeArray(); // Choices
-        newSegment = response[1]
-        newChoices = response[2]
+        expect(response.segments['1']).toBeDefined();
+        expect(response.choices['1-1']).toBeDefined();
+        expect(response.choices['1-2']).toBeDefined();
+        story = {
+            segments: { ...story.segments, ...response.segments },
+            choices: { ...story.choices, ...response.choices }
+        }
     })
 
-    it('should retrieve a continued story', async () => { // TODO: DEPRACATE TMI for this API
+    it('should not continue a story which is read only', async () => {
         const response = await app.handle(
-            new Request(`http://localhost/api/story/${tag}/`, {
-                method: 'GET',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-            })
-        ).then(res => res.json())
-
-        console.log(response)
-        expect(response.tag).toEqual(tag); // story exists with unique tag name
-        expect(Object.values(response.segments)).toContain(newSegment); // story exists with unique tag name
-
-    })
-
-    it('should not continue a story at the wrong position', async () => {
-        const response = await app.handle(
-            new Request('http://localhost/api/story/action', {
+            new Request('http://localhost/api/story/action/readonly', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                 },
                 body: JSON.stringify({
                     tag: tag,
-                    position: [1, 3],
-                    action: 1
+                    position: '0',
+                    action: 2
                 }),
             })
         ).then(res => res.json())
 
         expect(response.name).toEqual('Error');
-
     })
 
-    it('should retrieve test story segment at position 0-1', async () => {
+    it('should retrieve a story with existing continuation in readonly', async () => {
+        const response = await app.handle(
+            new Request('http://localhost/api/story/action/readonly', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    tag: tag,
+                    position: '0',
+                    action: 1
+                }),
+            })
+        ).then(res => res.json())
+
+        expect(response.segments['1']).toBeDefined();
+        expect(response.choices['1-1']).toBeDefined();
+        expect(response.choices['1-2']).toBeDefined();
+    })
+
+    it('should retrieve a story at a position 1', async () => {
         const response = await app.handle(
             new Request(`http://localhost/api/story/${tag}/1`, {
                 method: 'GET',
@@ -112,15 +132,40 @@ describe('API', () => {
             })
         ).then(res => res.json())
 
-        console.log(response)
-        expect(response.tag).toEqual(tag); // story exists with unique tag name
-        expect(response.journey[0]).toEqual(firstSegment); // 
-        expect(response.journey[1]).toEqual(newSegment); // 
+        expect(response.tag).toEqual(tag);
+        expect(response.segments['0']).toEqual(story.segments['0']);
+        expect(response.segments['1']).toEqual(story.segments['1']);
+        expect(response.choices['1-1']).toEqual(story.choices['1-1']);
+        expect(response.choices['1-2']).toEqual(story.choices['1-2']);
     })
 
-    it('should retrieve test story choices after choices 0-1', async () => {
+    it('should continue a story at position 1 and action 2', async () => {
         const response = await app.handle(
-            new Request(`http://localhost/api/story/${tag}/1/choices`, {
+            new Request('http://localhost/api/story/action', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    tag: tag,
+                    position: '1',
+                    action: 2
+                }),
+            })
+        ).then(res => res.json())
+
+        expect(response.segments['1-2']).toBeDefined();
+        expect(response.choices['1-2-1']).toBeDefined();
+        expect(response.choices['1-2-2']).toBeDefined();
+        story = {
+            segments: { ...story.segments, ...response.segments },
+            choices: { ...story.choices, ...response.choices }
+        }
+    })
+
+    it('should retrieve a story at position 1-2', async () => {
+        const response = await app.handle(
+            new Request(`http://localhost/api/story/${tag}/1-2`, {
                 method: 'GET',
                 headers: {
                     'Content-Type': 'application/json',
@@ -128,15 +173,98 @@ describe('API', () => {
             })
         ).then(res => res.json())
 
-        console.log(response)
-        expect(response.tag).toEqual(tag); // story exists with unique tag name
-        expect(response.choices[0]).toEqual(newChoices[0]); // 
-        expect(response.choices[1]).toEqual(newChoices[1]); // 
+        expect(response.tag).toEqual(tag);
+        expect(response.segments['0']).toEqual(story.segments['0']);
+        expect(response.segments['1']).toEqual(story.segments['1']);
+        expect(response.segments['1-2']).toEqual(story.segments['1-2']);
+        expect(response.choices['1-2-1']).toEqual(story.choices['1-2-1']);
+        expect(response.choices['1-2-2']).toEqual(story.choices['1-2-2']);
     })
 
-    afterAll(async () => {
-        await db.deleteTestStory()
-        disconnect();
+    it('should not continue a story at the incorrect story', async () => {
+        const response = await app.handle(
+            new Request('http://localhost/api/story/action', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    tag: 'does-not-exist',
+                    position: '1',
+                    action: 1
+                }),
+            })
+        ).then(res => res.json())
+
+        expect(response.name).toEqual('Error');
     })
 
-});
+    it('should not continue a story at the incorrect position', async () => {
+        const response = await app.handle(
+            new Request('http://localhost/api/story/action', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    tag: tag,
+                    position: '3',
+                    action: 1
+                }),
+            })
+        ).then(res => res.json())
+
+        expect(response.name).toEqual('Error');
+    })
+
+    it('should not continue a story at the incorrect action', async () => {
+        const response = await app.handle(
+            new Request('http://localhost/api/story/action', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    tag: tag,
+                    position: '1-2',
+                    action: 3
+                }),
+            })
+        ).then(res => res.json())
+
+        expect(response.name).toEqual('Error');
+    })
+
+})
+
+const actionRequest = async (tag: string, position: string, action: number) => {
+    const request = new Request('http://localhost/api/story/action', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            tag: tag,
+            position: position,
+            action: action
+        }),
+    });
+    const response = await app.handle(request);
+    return response.json();
+};
+
+const makeRequest = async (tag: string, position: string, action: number) => {
+    const response = await fetch('http://localhost/api/story/action', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            tag,
+            position,
+            action
+        }),
+    });
+
+    return response.json();
+};
