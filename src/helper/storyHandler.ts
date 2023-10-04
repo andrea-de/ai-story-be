@@ -1,15 +1,16 @@
 import { Story } from "../db/Story";
-import {
-    newStoryInstruction,
-    calcEnding,
-    choiceInstruction,
-    storyInstruction
-} from "./storyProgression";
-
+import { calcEnding } from "./storyProgression";
 import { ChatGPTClient } from "../ai/ChatGPTClient";
 
-export default async function handleGetStory(): Promise<Story[]> {
+export async function handleGetAllStoriess(arg0: any): Promise<Story[]> {
     return await Story.find({})
+}
+
+// export async function handleGetAllStories({ query }: { query: { page: number, limit: number } }): Promise<Story[]> {
+export async function handleGetAllStories({ query }: { query: any }): Promise<Story[]> {
+    const skip = (query.page - 1) * query.limit;
+    const limit = (Number(query.limit) + 1) // passes one more to 
+    return await Story.find({}).skip(skip).limit(limit);
 }
 
 export async function handleGetStoryById({ params: { id } }: { params: { id: string } }): Promise<Story | null> {
@@ -20,6 +21,14 @@ export async function handleGetStoryByTag({ params: { tag } }: { params: { tag: 
     return await Story.findOne({ tag: tag })
 }
 
+export async function handleGetRandomStory(arg0: any): Promise<object> {
+    const randomStoryTagObject = await Story.aggregate([
+        { $sample: { size: 1 } },
+        { $project: { _id: 0, tag: 1 } }
+    ]);
+    return randomStoryTagObject
+}
+
 interface AtPosition {
     tag: string;
     position: string;
@@ -28,8 +37,10 @@ interface AtPosition {
 export async function handleGetStoryAtPosition({ params }: { params: AtPosition }) {
     const position = params.position.split('-').map(p => parseInt(p))
     const story = await Story.findOne({ tag: params.tag })
-    if (!story) return null
-    // check tree
+    if (!story) return { error: { name: 'TagInvalid', message: params.tag + ' not found' } };
+    const nextPositionExists = await (story as any).checkTree(position)
+    if (!nextPositionExists) return { error: { name: 'PositionInvalid', message: params.position + ' not found' } };
+
     const segments = await (story as any).getStoryAtPosition(position);
     const choices = await (story as any).getChoices(position);
 
@@ -56,7 +67,6 @@ export async function handleGetChoicesAtPosition({ params }: { params: AtPositio
 }
 
 export interface NewStory {
-    name: string;
     description: string;
     parts: number;
     choices: number;
@@ -83,11 +93,10 @@ class BadRequest extends Error {
 export async function handleCreateStory(body: NewStory): Promise<StoryResponse | BadRequest> {
     try {
         // Get First Segment
-        const [firstSegment, choices] = await ChatGPTClient.newStory('new story description', body.choices);
+        const [title, tag, segment, choices] = await ChatGPTClient.newStory(body.description, body.choices);
         const blurb = body.description; // should be received from ai
-        const tag = body.tag; // should be received from ai
 
-        const segmentsDict = { "0": firstSegment }
+        const segmentsDict = { "0": segment }
         const choicesDict: { [key: string]: string } = choices.reduce((obj, choice, index) => {
             obj[(index + 1).toString()] = choice;
             return obj;
@@ -99,7 +108,7 @@ export async function handleCreateStory(body: NewStory): Promise<StoryResponse |
 
         // Persist Story
         const story = new Story({
-            name: body.name,
+            name: title,
             description: body.description,
             tag: tag,
             blurb: blurb,
@@ -112,6 +121,7 @@ export async function handleCreateStory(body: NewStory): Promise<StoryResponse |
         await story.save();
 
         let result = {
+            tag: tag,
             segments: segmentsDict,
             choices: choicesDict
         }
@@ -173,7 +183,7 @@ export async function handleStoryAction(body: StoryAction, write = false, update
         const storyAtPosition: string[] = Object.values(storyAtPositionDict)
 
         const choice = await (story as any).getChoice([...positionArray, action])
-        const isEnding = calcEnding(story.storyLengthMin, story.storyLengthMax, action)
+        const isEnding = calcEnding(nextPositionArray.length, story.storyLengthMin, story.storyLengthMax)
         const [newSegment, newChoices] = await ChatGPTClient.continue(storyAtPosition, choice, isEnding ? 0 : story.choicesLength);
 
         // Persist

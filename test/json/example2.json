@@ -1,0 +1,21 @@
+{
+    "description": "You wake up in absolute darkness, clenching the cold bars of a prison cell. Blood stains your hands and the smell of fear gets stronger each passing minute.",
+    "title": "\"Lost in the Wilderness: A Journey of Survival and Redemption\"",
+    "tag": "wilderness-adventure-redemption-journey-survival-lost-recovery",
+    "segments": [
+        "You wake up in absolute darkness, disoriented and trapped within the confines of a prison cell. The cold bars press against your trembling fingers, and as you slowly adjust to your surroundings, the weight of a haunting realization settles upon you. Blood stains your hands, although you cannot remember how it got there. The metallic scent of fear pervades the air, growing more potent with each passing minute. Panic consumes you, driving your mind into overdrive as you desperately search for answers. Time becomes an enigmatic enemy, ticking away while you struggle to piece together the fragments of your memory.",
+        "Your fingers sweep across the cold, rough surface of the cell walls, searching desperately for any sign of a door. Heart pounding, you move slowly, methodically, willing your hands to find a glimmer of hope in this darkness. Suddenly, your trembling fingers encounter a small latch, hidden within the cracks. Eagerly, you grasp onto it, praying it leads to freedom as your hands pull, revealing a faint sliver of light that seeps into your prison cell.",
+        "As your shaking hands explore the edges of the newfound light, they finally make contact with a cold, metallic surface. Your heart skips a beat as you realize it's a door. With a surge of adrenaline, you push against it, desperate to escape the confinements of the cell and uncover the truth behind the blood on your hands.",
+        "But as you push against the door, your heart sinking with each futile attempt, you realize it's locked from the outside. Panic consumes you once more, tears mingling with the blood on your hands. The truth remains elusive, haunting your every thought as the darkness engulfs you once again, trapping you within its unforgiving grasp."
+    ],
+    "choices": [
+        "You start to feel for a door, hoping to find an escape from this nightmare.",
+        "With all your strength, you pry open the latch and squeeze through the narrow opening.",
+        "You step out into a dimly lit hallway, cautiously stepping forward towards the unknown."
+    ],
+    "unchosen": [
+        "You let out a desperate cry for help, hoping that someone, anyone, will hear your plea.",
+        "You crawl through the narrow opening, feeling the rough ground beneath your hands as you inch towards the light.",
+        "You hear faint footsteps approaching, causing your heart to race as you hide in the shadows."
+    ]
+}

@@ -6,6 +6,7 @@ const stories = require('./populate.json');
 describe('Population', () => {
 
     beforeAll(async () => {
+        await connect()
         await db.deleteTestStories()
     })
 
@@ -21,7 +22,7 @@ describe('Population', () => {
 
     })
 
-    test('should get back multiple stories', async () => {
+    test('should get back 5 stories', async () => {
         await storiesRequest()
             .then(response => expect(response.length).toBe(4));
     })

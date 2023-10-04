@@ -4,6 +4,8 @@ import { html } from '@elysiajs/html'
 import { MongooseClient } from './db/MongooseClient';
 import * as userHandler from './helper/userHandler';
 import * as storyHandler from './helper/storyHandler';
+import * as aiHandler from './helper/aiHandler';
+import chalk from 'chalk';
 
 export const db = new MongooseClient();
 db.connect();
@@ -13,9 +15,10 @@ export const live = 'Hello World'
 export const app = new Elysia()
     .use(cors())
     .get('/', () => live)
-    .onError(({ code, error }) => {
-        Bun.write(Bun.stdout, error + '\n');
-        return new Response(JSON.stringify({ ...error, name: "Error", code: code }))
+    .onError(({ error }) => {
+        if (error.name === 'Error') return error
+        Bun.write(Bun.stdout, chalk.red(error) + '\n');
+        return { error: error.name } //
     })
 
 /* Web */
@@ -33,7 +36,6 @@ app.group('/api/user', app => app
 
 const CreateScema = {
     body: t.Object({
-        name: t.String(),
         description: t.String(),
         parts: t.Number(),
         choices: t.Number(),
@@ -50,14 +52,18 @@ const ActionScema = {
     })
 }
 
+/* GPT */
+app.group('/api/ai', app => app
+    .get('/generate', aiHandler.handleGenerateDescription)
+)
+
 /* Story */
 app.group('/api/story', app => app
-
-    .get('/', storyHandler.default)
+    .get('/', storyHandler.handleGetAllStories)
     // .get('/:id', storyHandler.handleGetStoryById)
-    .get('/:tag', storyHandler.handleGetStoryByTag)
-    .get('/:tag/:position', storyHandler.handleGetStoryAtPosition)
-
+    .get('/tag/:tag', storyHandler.handleGetStoryByTag)
+    .get('/tag/:tag/:position', storyHandler.handleGetStoryAtPosition)
+    .get('/random', storyHandler.handleGetRandomStory)
     .post('/new', ({ body }) => storyHandler.handleCreateStory(body), CreateScema)
     .post('/action', ({ body }) => storyHandler.handleStoryAction(body, true, false), ActionScema)
     .post('/action/readonly', ({ body }) => storyHandler.handleStoryAction(body, false, false), ActionScema)

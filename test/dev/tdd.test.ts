@@ -1,82 +1,129 @@
 import { describe, expect, it, beforeAll, afterAll } from 'bun:test'
 import { app, disconnect, db } from '../../src/index';
+import { ChatGPTClient } from '../../src/ai/ChatGPTClient'
+import chalk from 'chalk';
+import wrapDefault from 'word-wrap';
 
-describe('API', () => {
+const example = require('../json/example.json')
+const wrap = (str: string) => wrapDefault(str, { width: 70 })
 
-    beforeAll(async () => {
-        await db.deleteTestStories()
+describe('ChatGPT', () => {
+    true
+
+    let generated = {
+        description: '',
+        title: '',
+        tag: '',
+        segments: [] as string[], // chosen only
+        choices: [] as string[], // choicen only
+        unchosen: [] as string[]
+    }
+
+    const useStatic = true; // manual control run 
+
+    it.skipIf(useStatic)('Generate description', async () => {
+        const generatedDescription = await ChatGPTClient.generateDescription()
+        expect(generatedDescription).toBeString()
+        generated.description = generatedDescription;
     })
 
-    afterAll(async () => {
-        // await db.deleteTestStory()
-        disconnect();
+    it.skipIf(useStatic)('Generate new story', async () => {
+        const [generatedTitle, generatedTag, generatedSegment] = await ChatGPTClient.generateNewStory(generated.description || example.description)
+        expect(generatedTitle).toBeString()
+        expect(generatedTag).toBeString()
+        expect(generatedSegment).toBeString()
+        generated.title = generatedTitle;
+        generated.tag = generatedTag;
+        generated.segments.push(generatedSegment)
+
     })
 
-    const tag = 'test-story'
+    it.skipIf(useStatic)('Generate N number choices which the user can choose after the introduction', async () => {
+        const position = 1
+        const segments = !useStatic ? generated.segments.slice(0, position) : example.segments.slice(0, position)
+        expect(segments.length).toBe(position)
+        const numChoices = 2
+        const choices = await ChatGPTClient.generateChoices(segments, numChoices)
+        expect(choices.length).toBe(numChoices)
 
-    it('Use case', async () => {
-        await createRequest('new story', 'new story description', 4, 2, tag)
-        await actionRequest(tag, '0', 1)
-        await actionRequest(tag, '1', 2)
-        await actionRequest(tag, '1-2', 2)
-        await getRequest(tag, '1-2-2')
-        .then(response => {
-            expect(Object.keys(response.segments)).toContain('0');
-            expect(Object.keys(response.segments)).toContain('1');
-            expect(Object.keys(response.segments)).not.toContain('1-1');
-            expect(Object.keys(response.segments)).toContain('1-2');
-            expect(Object.keys(response.segments)).toContain('1-2-2');
-            expect(Object.keys(response.choices)).not.toContain('1-1-2-2')
-            expect(Object.keys(response.choices)).toContain('1-2-2-1');
-            expect(Object.keys(response.choices)).toContain('1-2-2-2');
-        })
+        for (let i = 0; i < numChoices; i++) {
+            expect(choices[i]).toBeString()
+        }
+        generated.choices.push(choices[0])
+        generated.unchosen.push(choices[1])
+    })
+
+    it.skipIf(useStatic)('Generate continuing segment and choices after first choice', async () => {
+        const position = 1
+        const segments = !useStatic ? generated.segments.slice(0, position) : example.segments.slice(0, position)
+        expect(segments.length).toBe(position)
+        const choice = generated.choices[0] || example.choices[0]
+        expect(choice).toBeString()
+        const numChoices = 2
+
+        const [segment, choices] = await ChatGPTClient.generateContinuation(segments, choice, numChoices)
+
+        expect(segment).toBeString()
+        generated.segments.push(segment)
+
+        expect(choices.length).toBe(numChoices)
+        for (let i = 0; i < numChoices; i++) {
+            expect(choices[i]).toBeString()
+        }
+        generated.choices.push(choices[0])
+        generated.unchosen.push(choices[1])
+    })
+
+    it.skipIf(useStatic)('Generate continuing segment and choices after second choice', async () => {
+        const position = 2
+        const segments = !useStatic ? generated.segments.slice(0, position) : example.segments.slice(0, position)
+        expect(segments.length).toBe(position)
+        const choice = generated.choices[0] || example.choices[0]
+        expect(choice).toBeString()
+        const numChoices = 2
+
+        const [segment, choices] = await ChatGPTClient.generateContinuation(segments, choice, numChoices)
+
+        expect(segment).toBeString()
+        generated.segments.push(segment)
+
+        expect(choices.length).toBe(numChoices)
+        for (let i = 0; i < numChoices; i++) {
+            expect(choices[i]).toBeString()
+        }
+        generated.choices.push(choices[0])
+        generated.unchosen.push(choices[1])
+    })
+
+    it.skipIf(useStatic)('Generate ending segment', async () => {
+        const position = 3
+        const segments = !useStatic ? generated.segments.slice(0, position) : example.segments.slice(0, position)
+        expect(segments.length).toBe(position)
+        const choice = generated.choices[0] || example.choices[0]
+        expect(choice).toBeString()
+
+        const [segment, choices] = await ChatGPTClient.generateContinuation(segments, choice, 0)
+
+        expect(segment).toBeString()
+        expect(choices.length).toBe(0)
+        generated.segments.push(segment)
+    })
+
+    const printStory = (story: any) => {
+        Bun.write(Bun.stdout, '\n\n' + chalk.bold.greenBright('Description recorded: \n\n') + wrap(story.description) + '\n\n');
+        Bun.write(Bun.stdout, chalk.bold.greenBright('Story recorded: \n\n'))
+        for (let i = 0; i < story.segments.length; i++) {
+            if (story.segments[i]) Bun.write(Bun.stdout, wrap(story.segments[i]) + '\n\n')
+            if (story.unchosen[i]) Bun.write(Bun.stdout, wrap(chalk.italic.gray.dim(story.choices[i])) + '\n\n')
+            if (story.choices[i]) Bun.write(Bun.stdout, wrap(chalk.italic.bold(story.unchosen[i])) + '\n\n')
+        }
+        console.log(JSON.stringify(story));
+    }
+
+    if (useStatic) printStory(example)
+
+    afterAll(() => {
+        printStory(generated)
     })
 
 })
-
-const getRequest = async (tag: string, position: string) => {
-    const request = new Request(`http://localhost/api/story/${tag}/${position}`, {
-        method: 'GET',
-        headers: {
-            'Content-Type': 'application/json',
-        }
-    });
-    const response = await app.handle(request);
-    return response.json();
-};
-
-const createRequest = async (name: string, description: string, parts: number, choices: number, tag: string) => {
-    const request = new Request('http://localhost/api/story/new', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-            name,
-            description,
-            parts,
-            choices,
-            tag
-        }),
-    });
-    const response = await app.handle(request);
-    return response.json();
-};
-
-const actionRequest = async (tag: string, position: string, action: number) => {
-    const request = new Request('http://localhost/api/story/action', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-            tag,
-            position,
-            action
-        }),
-    });
-    const response = await app.handle(request);
-    return response.json();
-};
-
-
