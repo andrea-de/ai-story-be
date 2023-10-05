@@ -23,6 +23,7 @@
   "scripts": {
     "dev": "bun --hot src/index.ts env",
     "serve": "bun src/index.ts env",
+    "start": "bun src/index.ts env",
     "tests": "bun test test/*.test.ts --coverage --preload ./test/setup.ts",
     "tdd": "bun test test/dev/tdd.test.ts --timeout 60000",
     "populate": "bun test test/populate.test.ts env"
