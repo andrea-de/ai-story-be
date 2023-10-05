@@ -7,3 +7,4 @@ profile.json
 
 node_modules
 .env
+*bundle.js
